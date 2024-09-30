@@ -1,23 +1,26 @@
-# Start from the official Golang image
-FROM golang:1.17-alpine AS builder
+# Start from a more recent Golang image
+FROM golang:1.22-alpine AS builder
 
 # Set the working directory inside the container
 WORKDIR /app
 
-# Copy the Go module files
-COPY go.mod go.sum ./
-
-# Download the dependencies
-RUN go mod download
-
-# Copy the source code
+# Copy the entire project
 COPY . .
 
+# Initialize go module if go.mod doesn't exist
+RUN go mod init birdimage-api || true
+
+# Update go.mod to use the correct Go version
+RUN go mod edit -go=1.22
+
+# Download dependencies
+RUN go mod tidy
+
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -o birdimage-api ./cmd/birdimage-api
+RUN CGO_ENABLED=0 GOOS=linux go build -o birdimage-api ./birdImage/main.go
 
 # Start a new stage with a minimal alpine image
-FROM alpine:3.14
+FROM alpine:latest
 
 # Set the working directory
 WORKDIR /app
@@ -26,7 +29,7 @@ WORKDIR /app
 COPY --from=builder /app/birdimage-api .
 
 # Expose the port the app runs on
-EXPOSE 8081
+EXPOSE 4200
 
 # Command to run the application
 CMD ["./birdimage-api"]
