@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: birdimage-api-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /api/birdimages
+            pathType: Prefix
+            backend:
+              service:
+                name: birdimage-api
+                port:
+                  number: 80

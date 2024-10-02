@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: birdimage-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: birdimage-api
+  template:
+    metadata:
+      labels:
+        app: birdimage-api
+    spec:
+      containers:
+        - name: birdimage-api
+          image: lilithvengeance/birdimage-api:latest
+          ports:
+            - containerPort: 4200
+          resources:
+            limits:
+              cpu: "0.5"
+              memory: "256Mi"
+            requests:
+              cpu: "0.2"
+              memory: "128Mi"

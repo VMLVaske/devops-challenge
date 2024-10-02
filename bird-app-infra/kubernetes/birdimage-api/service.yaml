@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: birdimage-api
+spec:
+  selector:
+    app: birdimage-api
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 4200
+  type: ClusterIP # Changed from LoadBalancer to ClusterIP
