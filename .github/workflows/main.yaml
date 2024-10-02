@@ -10,10 +10,10 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v5
         with:
           go-version: 1.17
 
@@ -41,16 +41,16 @@ jobs:
     needs: build-and-test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Login to DockerHub
-        uses: docker/login-action@v1
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push Bird API
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v6
         with:
           context: ./apis/bird
           file: ./apis/bird/Dockerfile.bird-api
@@ -58,7 +58,7 @@ jobs:
           tags: lilithvengeance/bird-api:latest
 
       - name: Build and push BirdImage API
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v6
         with:
           context: ./apis/birdImage
           file: ./apis/birdImage/Dockerfile.birdimage-api
