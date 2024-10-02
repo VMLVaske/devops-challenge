@@ -3,6 +3,8 @@ import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
+import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
+import * as targets from 'aws-cdk-lib/aws-elasticloadbalancingv2-targets';
 
 // Configuration constants
 const MAX_AZS = 2;
@@ -12,6 +14,9 @@ const INSTANCE_TYPE = ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize
 
 
 export class BirdInfraStack extends cdk.Stack {
+  private k3sMaster: ec2.Instance;
+  private securityGroup: ec2.SecurityGroup;
+
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
@@ -20,27 +25,32 @@ export class BirdInfraStack extends cdk.Stack {
       natGateways: NAT_GATEWAYS,
     });
 
-    const securityGroup = this.createSecurityGroup(vpc);
+    this.securityGroup = this.createInitialSecurityGroup(vpc);
     const masterRole = this.createMasterRole();
     const workerRole = this.createWorkerRole();
     const machineImage = this.getUbuntuAMI();
     const bucket = this.createConfigBucket();
 
     const masterUserData = this.createMasterUserData(bucket);
-    const k3sMaster = this.createEC2Instance('K3sMaster', vpc, securityGroup, masterRole, masterUserData);
+    this.k3sMaster = this.createEC2Instance('K3sMaster', vpc, this.securityGroup, masterRole, masterUserData);
 
     for (let i = 0; i < WORKER_COUNT; i++) {
-      const workerUserData = this.createWorkerUserData(k3sMaster);
-      this.createEC2Instance(`K3sWorker${i + 1}`, vpc, securityGroup, workerRole, workerUserData);
+      const workerUserData = this.createWorkerUserData(this.k3sMaster);
+      this.createEC2Instance(`K3sWorker${i + 1}`, vpc, this.securityGroup, workerRole, workerUserData);
     }
 
-    this.createOutputs(k3sMaster, bucket);
+    const argocdLb = this.createArgocdLoadBalancer(vpc, this.k3sMaster);
+
+    // Update security group to allow traffic from ALB
+    this.updateSecurityGroupForAlb(argocdLb);
+
+    this.createOutputs(this.k3sMaster, argocdLb, bucket);
   }
 
-  private createSecurityGroup(vpc: ec2.Vpc): ec2.SecurityGroup {
+  private createInitialSecurityGroup(vpc: ec2.Vpc): ec2.SecurityGroup {
     const securityGroup = new ec2.SecurityGroup(this, 'BirdAppSecurityGroup', {
       vpc,
-      description: "Allow ssh and Kubernetes API Server access",
+      description: "Allow ssh, Kubernetes API Server, and ArgoCD access",
       allowAllOutbound: true,
     });
 
@@ -60,6 +70,20 @@ export class BirdInfraStack extends cdk.Stack {
     });
 
     return securityGroup;
+  }
+
+  private updateSecurityGroupForAlb(alb: elbv2.ApplicationLoadBalancer): void {
+    // Allow ArgoCD UI access only from the ALB
+    if (alb.connections.securityGroups && alb.connections.securityGroups.length > 0) {
+      const albSecurityGroup = alb.connections.securityGroups[0];
+      this.securityGroup.addIngressRule(
+        ec2.Peer.securityGroupId(albSecurityGroup.securityGroupId),
+        ec2.Port.tcp(8080),
+        'Allow ArgoCD UI access from ALB'
+      );
+    } else {
+      throw new Error('ALB security group not found');
+    }
   }
 
   private createMasterRole(): iam.Role {
@@ -178,8 +202,21 @@ export class BirdInfraStack extends cdk.Stack {
       `aws s3 cp s3://${bucket.bucketName}/bird-api.yaml /home/ubuntu/bird-api.yaml`,
       `aws s3 cp s3://${bucket.bucketName}/birdimage-api.yaml /home/ubuntu/birdimage-api.yaml`,
       'chown ubuntu:ubuntu /home/ubuntu/*.yaml',
-      'echo "Kubernetes manifests downloaded successfully"'
+      'echo "Kubernetes manifests downloaded successfully"',
 
+      // Install ArgoCD
+      'echo "Installing ArgoCD"',
+      'kubectl create namespace argocd',
+      'kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml',
+
+      // Patch ArgoCD server to use NodePort and listen on all interfaces
+      'kubectl patch svc argocd-server -n argocd -p \'{"spec": {"type": "NodePort"}}\'',
+      'kubectl patch svc argocd-server -n argocd -p \'{"spec": {"ports": [{"port": 80, "targetPort": 8080}]}}\'',
+      'kubectl patch deployment argocd-server -n argocd --type json -p \'[{"op": "add", "path": "/spec/template/spec/containers/0/command/-", "value": "--insecure"}]\'',
+
+      // Get admin password
+      'echo "ArgoCD admin password:"',
+      'kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d',
     );
     return userData;
   }
@@ -236,15 +273,46 @@ export class BirdInfraStack extends cdk.Stack {
     return userData;
   }
 
-  private createOutputs(k3sMaster: ec2.Instance, bucket: s3.Bucket): void {
+  private createOutputs(k3sMaster: ec2.Instance, argocdLb: elbv2.ApplicationLoadBalancer, bucket: s3.Bucket): void {
     new cdk.CfnOutput(this, 'K3sMasterPublicIp', {
       value: k3sMaster.instancePublicIp,
       description: 'Public IP address of the k3s master node',
+    });
+
+    new cdk.CfnOutput(this, 'ArgoCDLoadBalancerDNS', {
+      value: argocdLb.loadBalancerDnsName,
+      description: 'DNS name of the ArgoCD load balancer'
     });
 
     new cdk.CfnOutput(this, 'ConfigBucketName', {
       value: bucket.bucketName,
       description: 'S3 bucket for storing Kubernetes configuration'
     });
+  }
+
+  private createArgocdLoadBalancer(vpc: ec2.Vpc, k3sMaster: ec2.Instance): elbv2.ApplicationLoadBalancer {
+    const lb = new elbv2.ApplicationLoadBalancer(this, 'ArgocdLoadBalancer', {
+      vpc,
+      internetFacing: true
+    });
+
+    const listener = lb.addListener('ArgocdListener', {
+      port: 80,
+    });
+
+    listener.addTargets('ArgocdTargets', {
+      port: 8080,
+      protocol: elbv2.ApplicationProtocol.HTTP,
+      targets: [new targets.InstanceTarget(k3sMaster, 8080)],
+      healthCheck: {
+        path: '/healthz',
+        interval: cdk.Duration.seconds(30),
+      },
+    });
+
+    // Allow inbound traffic from the load balancer to the k3s master
+    k3sMaster.connections.allowFrom(lb, ec2.Port.tcp(8080));
+
+    return lb;
   }
 }
