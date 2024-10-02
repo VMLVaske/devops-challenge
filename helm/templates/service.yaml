@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "bird-app.fullname" . }}
+  labels:
+    {{- include "bird-app.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "bird-app.selectorLabels" . | nindent 4 }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "bird-app.fullname" . }}-bird-api
+  labels:
+    {{- include "bird-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bird-api
+spec:
+  type: {{ .Values.birdApi.service.type }}
+  ports:
+    - port: {{ .Values.birdApi.service.port }}
+      targetPort: {{ .Values.birdApi.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "bird-app.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: bird-api
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "bird-app.fullname" . }}-birdimage-api
+  labels:
+    {{- include "bird-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: birdimage-api
+spec:
+  type: {{ .Values.birdImageApi.service.type }}
+  ports:
+    - port: {{ .Values.birdImageApi.service.port }}
+      targetPort: {{ .Values.birdImageApi.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "bird-app.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: birdimage-api

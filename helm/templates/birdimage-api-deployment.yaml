@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "bird-app.fullname" . }}-image-api
+  labels:
+    {{- include "bird-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: image-api
+spec:
+  replicas: {{ .Values.birdImageApi.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "bird-app.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: image-api
+  template:
+    metadata:
+      labels:
+        {{- include "bird-app.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: image-api
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}-image-api
+          image: "{{ .Values.birdImageApi.image.repository }}:{{ .Values.birdImageApi.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.birdImageApi.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.birdImageApi.service.targetPort }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "bird-app.fullname" . }}-image-api
+  labels:
+    {{- include "bird-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: image-api
+spec:
+  type: {{ .Values.birdImageApi.service.type }}
+  ports:
+    - port: {{ .Values.birdImageApi.service.port }}
+      targetPort: {{ .Values.birdImageApi.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "bird-app.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: image-api

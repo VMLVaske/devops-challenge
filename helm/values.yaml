@@ -1,0 +1,54 @@
+birdApi:
+  replicaCount: 2
+  image:
+    repository: lilithvengeance/bird-api
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  service:
+    type: LoadBalancer
+    port: 80
+    targetPort: 4201
+
+birdImageApi:
+  replicaCount: 2
+  image:
+    repository: lilithvengeance/birdimage-api
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  service:
+    type: LoadBalancer
+    port: 80
+    targetPort: 4200
+
+# Add a global service section for the test-connection template
+service:
+  type: ClusterIP
+  port: 80
+
+serviceAccount:
+  create: true
+  name: ""
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# If you have a common image section, you can keep it, but it's better to use specific ones for each API
+image:
+  repository: lilithvengeance/bird-app
+  pullPolicy: IfNotPresent
+  tag: "latest"
