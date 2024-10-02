@@ -1,0 +1,66 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.17
+
+      - name: Build Bird API
+        run: |
+          cd apis/bird
+          go build -v ./...
+
+      - name: Test Bird API
+        run: |
+          cd apis/bird
+          go test -v ./...
+
+      - name: Build BirdImage API
+        run: |
+          cd apis/birdImage
+          go build -v ./...
+
+      - name: Test BirdImage API
+        run: |
+          cd apis/birdImage
+          go test -v ./...
+
+  docker-build-and-push:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Bird API
+        uses: docker/build-push-action@v2
+        with:
+          context: ./apis/bird
+          file: ./apis/bird/Dockerfile.bird-api
+          push: true
+          tags: lilithvengeance/bird-api:latest
+
+      - name: Build and push BirdImage API
+        uses: docker/build-push-action@v2
+        with:
+          context: ./apis/birdImage
+          file: ./apis/birdImage/Dockerfile.birdimage-api
+          push: true
+          tags: lilithvengeance/birdimage-api:latest
