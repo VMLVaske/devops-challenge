@@ -1,5 +1,5 @@
-# Start from a more recent Golang image
-FROM golang:1.22-alpine AS builder
+# Use a specific AMD64 version of the Go image
+FROM --platform=linux/amd64 golang:1.22-alpine AS builder
 
 # Set the working directory inside the container
 WORKDIR /app
@@ -16,11 +16,14 @@ RUN go mod edit -go=1.22
 # Download dependencies
 RUN go mod tidy
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -o birdimage-api ./birdImage/main.go
+# Build the application, explicitly setting the architecture
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o birdimage-api ./main.go
 
-# Start a new stage with a minimal alpine image
-FROM alpine:latest
+# Use a specific AMD64 version of Alpine
+FROM --platform=linux/amd64 alpine:3.14
+
+# Install file command and bash (for debugging)
+RUN apk add --no-cache file bash
 
 # Set the working directory
 WORKDIR /app
@@ -28,8 +31,18 @@ WORKDIR /app
 # Copy the binary from the builder stage
 COPY --from=builder /app/birdimage-api .
 
+# Add this diagnostic script (fixed version)
+RUN echo '#!/bin/bash' >/app/run.sh
+RUN echo 'file /app/birdimage-api' >>/app/run.sh
+RUN echo 'echo "Running birdimage-api..."' >>/app/run.sh
+RUN echo '/app/birdimage-api' >>/app/run.sh
+RUN chmod +x /app/run.sh
+
+# Print the content of run.sh for verification
+RUN cat /app/run.sh
+
 # Expose the port the app runs on
 EXPOSE 4200
 
-# Command to run the application
-CMD ["./birdimage-api"]
+# Use bash to run the script
+CMD ["/bin/bash", "/app/run.sh"]
