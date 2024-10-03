@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: bird-api
-          image: lilithvengeance/bird-api:latest
+          image: lilithvengeance/bird-api:b43c919d45851f999711ce40fcc6750da0ae8e71
           ports:
             - containerPort: 4201
           readinessProbe:
