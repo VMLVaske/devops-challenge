@@ -18,14 +18,14 @@ jobs:
           go-version: 1.22
 
       - name: Build Bird API
+        working-directory: ./apis/bird
         run: |
-          cd apis/bird
           go mod tidy
           go build -v ./...
 
       - name: Test Bird API
+        working-directory: ./apis/bird
         run: |
-          cd apis/bird
           go mod tidy
           go test -v ./...
 
@@ -72,6 +72,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: List directory contents
+        run: |
+          ls -R kubernetes
 
       - name: Update Kubernetes manifests
         run: |
