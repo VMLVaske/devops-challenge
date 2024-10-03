@@ -1,7 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as iam from 'aws-cdk-lib/aws-iam';
-import * as s3 from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as targets from 'aws-cdk-lib/aws-elasticloadbalancingv2-targets';
@@ -11,7 +10,6 @@ const MAX_AZS = 2;
 const NAT_GATEWAYS = 1;
 const WORKER_COUNT = 2;
 const INSTANCE_TYPE = ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MEDIUM);
-
 
 export class BirdInfraStack extends cdk.Stack {
   private k3sMaster: ec2.Instance;
@@ -28,10 +26,8 @@ export class BirdInfraStack extends cdk.Stack {
     this.securityGroup = this.createInitialSecurityGroup(vpc);
     const masterRole = this.createMasterRole();
     const workerRole = this.createWorkerRole();
-    const machineImage = this.getUbuntuAMI();
-    const bucket = this.createConfigBucket();
 
-    const masterUserData = this.createMasterUserData(bucket);
+    const masterUserData = this.createMasterUserData();
     this.k3sMaster = this.createEC2Instance('K3sMaster', vpc, this.securityGroup, masterRole, masterUserData);
 
     for (let i = 0; i < WORKER_COUNT; i++) {
@@ -44,7 +40,7 @@ export class BirdInfraStack extends cdk.Stack {
     // Update security group to allow traffic from ALB
     this.updateSecurityGroupForAlb(argocdLb);
 
-    this.createOutputs(this.k3sMaster, argocdLb, bucket);
+    this.createOutputs(this.k3sMaster, argocdLb);
   }
 
   private createInitialSecurityGroup(vpc: ec2.Vpc): ec2.SecurityGroup {
@@ -127,17 +123,6 @@ export class BirdInfraStack extends cdk.Stack {
     );
   }
 
-  private createConfigBucket(): s3.Bucket {
-    const bucket = new s3.Bucket(this, 'BirdAppConfigBucket', {
-      versioned: true,
-      encryption: s3.BucketEncryption.S3_MANAGED,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-    });
-
-    return bucket;
-  }
-
   private createEC2Instance(id: string,
     vpc: ec2.Vpc,
     securityGroup: ec2.SecurityGroup,
@@ -156,16 +141,16 @@ export class BirdInfraStack extends cdk.Stack {
     });
   }
 
-  private createMasterUserData(bucket: s3.Bucket): ec2.UserData {
+  private createMasterUserData(): ec2.UserData {
     const userData = ec2.UserData.forLinux();
     userData.addCommands(
       '#!/bin/bash',
       'exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1',
 
-      // Install AWS CLI first
+      // Install AWS CLI
       'echo "Installing AWS CLI"',
       'apt-get update && apt-get install -y awscli',
-      'source ~/.bashrc',  // This refreshes the PATH to include AWS CLI
+      'source ~/.bashrc',
 
       // Set AWS region
       `echo "export AWS_DEFAULT_REGION=${this.region}" >> /etc/environment`,
@@ -175,7 +160,7 @@ export class BirdInfraStack extends cdk.Stack {
       'echo "Starting k3s installation"',
       'curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik" sh -',
       'echo "k3s installation completed"',
-      'sleep 30', // Give k3s more time to generate the token
+      'sleep 30',
 
       // Retrieve and store the token
       'TOKEN=$(sudo cat /var/lib/rancher/k3s/server/node-token)',
@@ -189,20 +174,13 @@ export class BirdInfraStack extends cdk.Stack {
       '  exit 1',
       'fi',
 
-      // Rest of your commands
+      // Set up kubectl
       '/usr/local/bin/kubectl get nodes',
       'echo "K3s installation and node check completed"',
       'echo "export KUBECONFIG=/etc/rancher/k3s/k3s.yaml" >> /home/ubuntu/.bashrc',
       'cp /etc/rancher/k3s/k3s.yaml /home/ubuntu/kubeconfig',
       'chown ubuntu:ubuntu /home/ubuntu/kubeconfig',
       'echo "export KUBECONFIG=/home/ubuntu/kubeconfig" >> /home/ubuntu/.bashrc',
-
-      // S3 Commands
-      'echo "Downloading Kubernetes manifests from S3"',
-      `aws s3 cp s3://${bucket.bucketName}/bird-api.yaml /home/ubuntu/bird-api.yaml`,
-      `aws s3 cp s3://${bucket.bucketName}/birdimage-api.yaml /home/ubuntu/birdimage-api.yaml`,
-      'chown ubuntu:ubuntu /home/ubuntu/*.yaml',
-      'echo "Kubernetes manifests downloaded successfully"',
 
       // Install ArgoCD
       'echo "Installing ArgoCD"',
@@ -213,6 +191,28 @@ export class BirdInfraStack extends cdk.Stack {
       'kubectl patch svc argocd-server -n argocd -p \'{"spec": {"type": "NodePort"}}\'',
       'kubectl patch svc argocd-server -n argocd -p \'{"spec": {"ports": [{"port": 80, "targetPort": 8080}]}}\'',
       'kubectl patch deployment argocd-server -n argocd --type json -p \'[{"op": "add", "path": "/spec/template/spec/containers/0/command/-", "value": "--insecure"}]\'',
+
+      // Set up ArgoCD application
+      'cat <<EOF | kubectl apply -f -',
+      'apiVersion: argoproj.io/v1alpha1',
+      'kind: Application',
+      'metadata:',
+      '  name: bird-app',
+      '  namespace: argocd',
+      'spec:',
+      '  project: default',
+      '  source:',
+      '    repoURL: https://github.com/VMLVaske/devops-challenge.git',
+      '    targetRevision: HEAD',
+      '    path: bird-app-infra/kubernetes',
+      '  destination:',
+      '    server: https://kubernetes.default.svc',
+      '    namespace: default',
+      '  syncPolicy:',
+      '    automated:',
+      '      prune: true',
+      '      selfHeal: true',
+      'EOF',
 
       // Get admin password
       'echo "ArgoCD admin password:"',
@@ -273,7 +273,7 @@ export class BirdInfraStack extends cdk.Stack {
     return userData;
   }
 
-  private createOutputs(k3sMaster: ec2.Instance, argocdLb: elbv2.ApplicationLoadBalancer, bucket: s3.Bucket): void {
+  private createOutputs(k3sMaster: ec2.Instance, argocdLb: elbv2.ApplicationLoadBalancer): void {
     new cdk.CfnOutput(this, 'K3sMasterPublicIp', {
       value: k3sMaster.instancePublicIp,
       description: 'Public IP address of the k3s master node',
@@ -282,11 +282,6 @@ export class BirdInfraStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'ArgoCDLoadBalancerDNS', {
       value: argocdLb.loadBalancerDnsName,
       description: 'DNS name of the ArgoCD load balancer'
-    });
-
-    new cdk.CfnOutput(this, 'ConfigBucketName', {
-      value: bucket.bucketName,
-      description: 'S3 bucket for storing Kubernetes configuration'
     });
   }
 
