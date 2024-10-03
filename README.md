@@ -17,7 +17,6 @@ You can run the binary with `./bird` or `./birdImage`.
 
 This reveals that birdApi depends on birdImageApi.
 
-
 # Challenge
 
 How to:
@@ -51,6 +50,8 @@ Evaluation criterias:
 3. **Kubernetes Cluster**: k3s deployed on EC2 instances
 4. **GitOps Deployment**: ArgoCD for automated, Git-based deployments
 5. **CI/CD Pipeline**: GitHub Actions for continuous integration and delivery
+6. **Helm Charts**: Used for packaging and deploying the application
+7. **Dynamic EC2 Key Pair**: Automatically generated and securely stored in AWS Secrets Manager
 
 ## Getting Started
 
@@ -58,8 +59,9 @@ Evaluation criterias:
 
 - Go 1.22 or later
 - Docker
-- AWS CLI and CDK
+- AWS CLI and CDK v2
 - kubectl
+- Helm
 
 ### Running the APIs Locally
 
@@ -71,7 +73,7 @@ Note: The Bird API depends on the BirdImage API.
 
 ### Containerization
 
-Build and push Docker images:
+Docker images are automatically built and pushed by the CI/CD pipeline. To build manually:
 
 ```bash
 cd apis/bird
@@ -80,29 +82,30 @@ docker push your-dockerhub-username/bird-api:latest
 cd ../birdImage
 docker build -t your-dockerhub-username/birdimage-api:latest -f Dockerfile.birdimage-api .
 docker push your-dockerhub-username/birdimage-api:latest
-````
-
+```
 
 ### Deploying Infrastructure
 
 1. Navigate to `bird-app-infra` directory
 2. Run `npm install`
-3. Deploy with `npx cdk deploy`
+3. Build the CDK app with `npm run build`
+4. Deploy with `npx cdk deploy`
 
 ## CI/CD Workflow
 
 1. Push to the main branch triggers GitHub Actions
 2. Actions build, test, and push new Docker images
-3. Kubernetes manifests are updated with new image tags
-4. ArgoCD detects changes and applies them to the cluster
+3. Helm chart values are updated with new image tags
+4. CDK stack is deployed/updated
+5. ArgoCD detects changes and applies them to the cluster
 
 ## Kubernetes Deployment
 
-Kubernetes manifests are in `bird-app-infra/kubernetes`. ArgoCD automatically applies these to the cluster.
+Helm charts are located in the `helm` directory. ArgoCD automatically applies these to the cluster based on the configuration in `bird-app-infra/argocd/application.yaml`.
 
 ## Customization
 
-Modify configuration constants in the CDK stack or adjust resource configurations as needed.
+Modify configuration constants in the CDK stack (`bird-app-infra/lib/birdinfrastack.ts`) or adjust Helm values (`helm/values.yaml`) as needed.
 
 ## Cleanup
 
@@ -112,10 +115,19 @@ Run `npx cdk destroy` in the `bird-app-infra` directory to remove all AWS resour
 
 - Uses Ubuntu 20.04 LTS AMI for EC2 instances
 - Implements security best practices for AWS and Kubernetes
-- Demonstrates skills in IaC, containerization, and GitOps
+- Demonstrates skills in IaC, containerization, GitOps, and Helm
+- EC2 key pairs are dynamically generated and securely stored
 
 ## Evaluation Criteria
 
 - Best practices in security, containerization, Kubernetes, and cloud
 - Code organization and clarity
 - Infrastructure scalability and maintainability
+
+## ArgoCD Configuration
+
+The ArgoCD application is defined in `bird-app-infra/argocd/application.yaml`. This configuration tells ArgoCD to deploy our application using the Helm chart located in the `helm` directory.
+
+## Secrets Management
+
+EC2 instance private keys are automatically generated and stored in AWS Secrets Manager. The GitHub Actions workflow retrieves these securely for SSH access during deployment.
