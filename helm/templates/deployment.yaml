@@ -1,67 +1,55 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "bird-app.fullname" . }}
+  name: {{ include "bird-app.fullname" . }}-bird-api
   labels:
     {{- include "bird-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bird-api
 spec:
-  {{- if not .Values.autoscaling.enabled }}
-  replicas: {{ .Values.replicaCount }}
-  {{- end }}
+  replicas: {{ .Values.birdApi.replicaCount }}
   selector:
     matchLabels:
       {{- include "bird-app.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: bird-api
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
-      annotations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
       labels:
-        {{- include "bird-app.labels" . | nindent 8 }}
-        {{- with .Values.podLabels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+        {{- include "bird-app.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: bird-api
     spec:
-      {{- with .Values.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      serviceAccountName: {{ include "bird-app.serviceAccountName" . }}
-      securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: bird-app
-          image: lilithvengeance/bird-api:latest
-          command: ["/bin/sh"]
-          args: ["-c", "while true; do sleep 30; done;"]
+        - name: {{ .Chart.Name }}-bird-api
+          image: "{{ .Values.birdApi.image.repository }}:{{ .Values.birdApi.image.tag }}"
+          imagePullPolicy: {{ .Values.birdApi.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: {{ .Values.service.port }}
+              containerPort: {{ .Values.birdApi.service.targetPort }}
               protocol: TCP
-          livenessProbe:
-            {{- toYaml .Values.livenessProbe | nindent 12 }}
-          readinessProbe:
-            {{- toYaml .Values.readinessProbe | nindent 12 }}
-          resources:
-            {{- toYaml .Values.resources | nindent 12 }}
-          {{- with .Values.volumeMounts }}
-          volumeMounts:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-      {{- with .Values.volumes }}
-      volumes:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.tolerations }}
-      tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "bird-app.fullname" . }}-birdimage-api
+  labels:
+    {{- include "bird-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: birdimage-api
+spec:
+  replicas: {{ .Values.birdImageApi.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "bird-app.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: birdimage-api
+  template:
+    metadata:
+      labels:
+        {{- include "bird-app.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: birdimage-api
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}-birdimage-api
+          image: "{{ .Values.birdImageApi.image.repository }}:{{ .Values.birdImageApi.image.tag }}"
+          imagePullPolicy: {{ .Values.birdImageApi.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.birdImageApi.service.targetPort }}
+              protocol: TCP
