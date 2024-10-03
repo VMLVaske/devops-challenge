@@ -75,19 +75,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: List directory contents
-        run: |
-          ls -R kubernetes
-
       - name: Update Kubernetes manifests
         run: |
-          sed -i 's|lilithvengeance/bird-api:.*|lilithvengeance/bird-api:${{ github.sha }}|' kubernetes/bird-api/deployment.yaml
-          sed -i 's|lilithvengeance/birdimage-api:.*|lilithvengeance/birdimage-api:${{ github.sha }}|' kubernetes/birdimage-api/deployment.yaml
+          sed -i 's|lilithvengeance/bird-api:.*|lilithvengeance/bird-api:${{ github.sha }}|' bird-app-infra/kubernetes/bird-api/deployment.yaml
+          sed -i 's|lilithvengeance/birdimage-api:.*|lilithvengeance/birdimage-api:${{ github.sha }}|' bird-app-infra/kubernetes/birdimage-api/deployment.yaml
 
       - name: Commit and push changes
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add kubernetes/bird-api/deployment.yaml kubernetes/birdimage-api/deployment.yaml
+          git add bird-app-infra/kubernetes/bird-api/deployment.yaml bird-app-infra/kubernetes/birdimage-api/deployment.yaml
           git commit -m "Update image tags to ${{ github.sha }}"
           git push
