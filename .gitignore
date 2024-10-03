@@ -2,3 +2,9 @@ apis/bird/getBird
 apis/birdImage/getBirdImage
 
 Readme2.md
+test.md
+.DS_Store
+.vscode
+
+bird-app-infra/package-lock.json
+bird-app-infra/node_modules
