@@ -8,6 +8,9 @@ import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdaNodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as path from 'path';
+import * as route53 from 'aws-cdk-lib/aws-route53';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
+import * as route53targets from 'aws-cdk-lib/aws-route53-targets';
 
 // Configuration constants
 const MAX_AZS = 2;
@@ -47,6 +50,24 @@ export class BirdInfraStack extends cdk.Stack {
     // Create the KeyPairSecretAttachment early
     this.keyPairSecretAttachment = new KeyPairSecretAttachment(this, 'KeyPairSecretAttachment', key.attrKeyPairId, this.privateKey.secretArn);
 
+
+
+    // Reference existing hosted zone
+    const hostedZone = route53.HostedZone.fromLookup(this, 'HostedZone', {
+      domainName: 'vmlvaske.com',
+    });
+
+    // Reference existing ACM certificate
+    const certificate = acm.Certificate.fromCertificateArn(this, 'Certificate',
+      'arn:aws:acm:eu-central-1:695321653301:certificate/28603096-5aef-48bd-8528-5313ac20cb89');
+
+    const argocdLb = this.createArgocdLoadBalancer(vpc, this.k3sMaster, certificate as acm.Certificate);
+
+    new route53.ARecord(this, 'ArgocdDNS', {
+      zone: hostedZone,
+      target: route53.RecordTarget.fromAlias(new route53targets.LoadBalancerTarget(argocdLb)),
+      recordName: 'argocd.vmlvaske.com', // Replace with your desired subdomain
+    });
     // Make other resources depend on the KeyPairSecretAttachment
     const masterRole = this.createMasterRole();
     masterRole.node.addDependency(this.keyPairSecretAttachment);
@@ -63,12 +84,14 @@ export class BirdInfraStack extends cdk.Stack {
       this.createEC2Instance(`K3sWorker${i + 1}`, vpc, this.securityGroup, workerRole, workerUserData, key.keyName);
     }
 
-    const argocdLb = this.createArgocdLoadBalancer(vpc, this.k3sMaster);
+
 
     // Update security group to allow traffic from ALB
     this.updateSecurityGroupForAlb(argocdLb);
 
     this.createOutputs(this.k3sMaster, argocdLb);
+
+
   }
 
   private createInitialSecurityGroup(vpc: ec2.Vpc): ec2.SecurityGroup {
@@ -321,20 +344,22 @@ export class BirdInfraStack extends cdk.Stack {
     });
   }
 
-  private createArgocdLoadBalancer(vpc: ec2.Vpc, k3sMaster: ec2.Instance): elbv2.ApplicationLoadBalancer {
+  private createArgocdLoadBalancer(vpc: ec2.Vpc, k3sMaster: ec2.Instance, certificate: acm.Certificate): elbv2.ApplicationLoadBalancer {
     const lb = new elbv2.ApplicationLoadBalancer(this, 'ArgocdLoadBalancer', {
       vpc,
       internetFacing: true
     });
 
-    const listener = lb.addListener('ArgocdListener', {
-      port: 80,
+    const listener = lb.addListener('ArgoListener', {
+      port: 443,
+      protocol: elbv2.ApplicationProtocol.HTTPS,
+      certificates: [certificate],
     });
 
     listener.addTargets('ArgoTargets', {
       port: 80,
       protocol: elbv2.ApplicationProtocol.HTTP,
-      targets: [new targets.IpTarget('10.0.0.1'), new targets.IpTarget('10.0.0.2')],
+      targets: [new targets.IpTarget('10.0.0.1'), new targets.IpTarget('10.0.0.2')], // Replace with your actual target IPs
       healthCheck: {
         path: '/',
         protocol: elbv2.Protocol.HTTP
