@@ -84,14 +84,10 @@ export class BirdInfraStack extends cdk.Stack {
       this.createEC2Instance(`K3sWorker${i + 1}`, vpc, this.securityGroup, workerRole, workerUserData, key.keyName);
     }
 
-
-
     // Update security group to allow traffic from ALB
     this.updateSecurityGroupForAlb(argocdLb);
 
     this.createOutputs(this.k3sMaster, argocdLb);
-
-
   }
 
   private createInitialSecurityGroup(vpc: ec2.Vpc): ec2.SecurityGroup {
@@ -380,7 +376,7 @@ class KeyPairSecretAttachmentProvider extends Construct {
     super(scope, id);
 
     const onEventHandler = new lambdaNodejs.NodejsFunction(this, 'KeyPairSecretAttachmentHandler', {
-      entry: path.join(__dirname, 'lambda', 'index.js'),
+      entry: path.join(__dirname, 'index.js'),
       handler: 'handler',
       runtime: lambda.Runtime.NODEJS_18_X,
       bundling: {
