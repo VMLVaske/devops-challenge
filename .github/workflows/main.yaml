@@ -123,4 +123,4 @@ jobs:
         run: |
           sed -i 's/${BIRD_API_TAG}/${{ github.sha }}/g' bird-app-infra/argocd/application.yaml
           sed -i 's/${BIRDIMAGE_API_TAG}/${{ github.sha }}/g' bird-app-infra/argocd/application.yaml
-          kubectl apply -f bird-app-infra/argocd/application.yaml
+          kubectl apply -f bird-app-infra/argocd/application.yaml --insecure-skip-tls-verify
