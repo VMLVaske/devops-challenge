@@ -102,6 +102,7 @@ export class BirdInfraStack extends cdk.Stack {
       { port: 6443, description: 'Allow Kubernetes API Server' },
       { port: 8472, description: 'Allow k3s agent communication', protocol: ec2.Protocol.UDP },
       { port: 10250, description: 'Allow kubelet' },
+      { port: 8080, description: 'Allow ArgoCD' },
     ];
 
     ingressRules.forEach(rule => {
@@ -252,6 +253,7 @@ export class BirdInfraStack extends cdk.Stack {
       // Install ArgoCD
       'kubectl create namespace argocd',
       'kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml',
+      'kubectl -n argocd patch deployment argocd-server --patch \'{"spec": {"template": {"spec": {"containers": [{"name": "argocd-server","command": ["argocd-server","--insecure"]}]}}}}\'',
 
       // Wait for ArgoCD to be ready
       'kubectl wait --for=condition=available --timeout=600s deployment/argocd-server -n argocd',
@@ -358,6 +360,16 @@ export class BirdInfraStack extends cdk.Stack {
       targets: [new targets.IpTarget('10.0.0.1'), new targets.IpTarget('10.0.0.2')], // Replace with your actual target IPs
       healthCheck: {
         path: '/',
+        protocol: elbv2.Protocol.HTTP
+      }
+    });
+
+    listener.addTargets('ArgoHealthTargets', {
+      port: 8080, // ArgoCD server typically runs on 8080
+      protocol: elbv2.ApplicationProtocol.HTTP,
+      targets: [new targets.InstanceTarget(k3sMaster)],
+      healthCheck: {
+        path: '/healthz',
         protocol: elbv2.Protocol.HTTP
       }
     });
