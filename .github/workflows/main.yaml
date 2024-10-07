@@ -112,10 +112,11 @@ jobs:
       - name: Add EC2 instance to known hosts
         run: ssh-keyscan -H ${{ secrets.MASTER_IP }} >> ~/.ssh/known_hosts
 
-      - name: Fetch kubeconfig from EC2 instance
+      - name: Fetch and modify kubeconfig from EC2 instance
         run: |
           ssh -i k3s_private_key.pem ubuntu@${{ secrets.MASTER_IP }} 'sudo cat /etc/rancher/k3s/k3s.yaml' > kubeconfig
-          sed -i 's/127.0.0.1/${{ secrets.MASTER_IP }}/g' kubeconfig
+          sed -i "s/127.0.0.1/${{ secrets.MASTER_IP }}/g" kubeconfig
+          sed -i "s/localhost/${{ secrets.MASTER_IP }}/g" kubeconfig
           echo "KUBECONFIG=$PWD/kubeconfig" >> $GITHUB_ENV
 
       - name: Update ArgoCD application
