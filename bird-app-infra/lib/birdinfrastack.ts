@@ -15,7 +15,6 @@ import * as route53targets from 'aws-cdk-lib/aws-route53-targets';
 // Configuration constants
 const MAX_AZS = 2;
 const NAT_GATEWAYS = 1;
-const WORKER_COUNT = 2;
 const INSTANCE_TYPE = ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MEDIUM);
 
 export class BirdInfraStack extends cdk.Stack {
@@ -50,8 +49,6 @@ export class BirdInfraStack extends cdk.Stack {
     // Create the KeyPairSecretAttachment early
     this.keyPairSecretAttachment = new KeyPairSecretAttachment(this, 'KeyPairSecretAttachment', key.attrKeyPairId, this.privateKey.secretArn);
 
-
-
     // Reference existing hosted zone
     const hostedZone = route53.HostedZone.fromLookup(this, 'HostedZone', {
       domainName: 'vmlvaske.com',
@@ -79,9 +76,15 @@ export class BirdInfraStack extends cdk.Stack {
     this.k3sMaster = this.createEC2Instance('K3sMaster', vpc, this.securityGroup, masterRole, masterUserData, key.keyName);
     this.k3sMaster.node.addDependency(this.keyPairSecretAttachment);
 
-    for (let i = 0; i < WORKER_COUNT; i++) {
+    const workerCount = new cdk.CfnParameter(this, 'WorkerCount', {
+      type: 'Number',
+      default: 2,
+      minValue: 1,
+    });
+
+    for (let i = 0; i < workerCount.valueAsNumber; i++) {
       const workerUserData = this.createWorkerUserData(this.k3sMaster);
-      this.createEC2Instance(`K3sWorker${i + 1}`, vpc, this.securityGroup, workerRole, workerUserData, key.keyName);
+      this.createEC2Instance(`K3sWorker${i + 1}`, vpc, this.securityGroup, workerRole, workerUserData, key.keyName).node.addDependency(this.keyPairSecretAttachment);
     }
 
     // Update security group to allow traffic from ALB
@@ -97,6 +100,12 @@ export class BirdInfraStack extends cdk.Stack {
       allowAllOutbound: true,
     });
 
+    this.addSecurityGroupRules(securityGroup);
+
+    return securityGroup;
+  }
+
+  private addSecurityGroupRules(securityGroup: ec2.SecurityGroup): void {
     const ingressRules = [
       { port: 22, description: 'Allow SSH access from anywhere' },
       { port: 6443, description: 'Allow Kubernetes API Server' },
@@ -112,8 +121,6 @@ export class BirdInfraStack extends cdk.Stack {
         rule.description
       );
     });
-
-    return securityGroup;
   }
 
   private updateSecurityGroupForAlb(alb: elbv2.ApplicationLoadBalancer): void {
@@ -192,7 +199,7 @@ export class BirdInfraStack extends cdk.Stack {
     userData: ec2.UserData,
     keyName: string
   ): ec2.Instance {
-    return new ec2.Instance(this, id, {
+    const instance = new ec2.Instance(this, id, {
       vpc,
       instanceType: INSTANCE_TYPE,
       machineImage: this.getUbuntuAMI(),
@@ -200,9 +207,13 @@ export class BirdInfraStack extends cdk.Stack {
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
       role,
       userData,
-      userDataCausesReplacement: true,
       keyName,
     });
+
+    // Add mutable properties separately
+    cdk.Tags.of(instance).add('Environment', 'Production');
+
+    return instance;
   }
 
   private createMasterUserData(): ec2.UserData {
@@ -268,7 +279,7 @@ export class BirdInfraStack extends cdk.Stack {
       'spec:',
       '  project: default',
       '  source:',
-      '    repoURL: https://github.com/your-username/your-repo.git',
+      '    repoURL: git@github.com:VMLVaske/devops-challenge.git',
       '    targetRevision: HEAD',
       '    path: helm',
       '    helm:',
@@ -367,7 +378,7 @@ export class BirdInfraStack extends cdk.Stack {
     listener.addTargets('ArgoHealthTargets', {
       port: 8080, // ArgoCD server typically runs on 8080
       protocol: elbv2.ApplicationProtocol.HTTP,
-      targets: [new targets.InstanceTarget(k3sMaster)],
+      targets: [new targets.InstanceTarget(this.k3sMaster)],
       healthCheck: {
         path: '/healthz',
         protocol: elbv2.Protocol.HTTP
