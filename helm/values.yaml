@@ -3,7 +3,7 @@ birdApi:
   image:
     repository: lilithvengeance/bird-api
     pullPolicy: IfNotPresent
-    tag: "afd191f4e962d2e02d7a62e94320f5f0f85f6888"
+    tag: "8387ec19730e6979cb65feac733be21c123d91f4"
   service:
     type: LoadBalancer
     port: 80
@@ -14,7 +14,7 @@ birdImageApi:
   image:
     repository: lilithvengeance/birdimage-api
     pullPolicy: IfNotPresent
-    tag: "afd191f4e962d2e02d7a62e94320f5f0f85f6888"
+    tag: "8387ec19730e6979cb65feac733be21c123d91f4"
   service:
     type: LoadBalancer
     port: 80
@@ -51,4 +51,4 @@ autoscaling:
 image:
   repository: lilithvengeance/bird-app
   pullPolicy: IfNotPresent
-  tag: "afd191f4e962d2e02d7a62e94320f5f0f85f6888"
+  tag: "8387ec19730e6979cb65feac733be21c123d91f4"
