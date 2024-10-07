@@ -376,7 +376,7 @@ class KeyPairSecretAttachmentProvider extends Construct {
     super(scope, id);
 
     const onEventHandler = new lambdaNodejs.NodejsFunction(this, 'KeyPairSecretAttachmentHandler', {
-      entry: path.join(__dirname, 'index.js'),
+      entry: path.join(__dirname, 'lambda', 'index.js'),
       handler: 'handler',
       runtime: lambda.Runtime.NODEJS_18_X,
       bundling: {

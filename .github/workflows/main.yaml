@@ -118,6 +118,11 @@ jobs:
           cd bird-app-infra
           npm run build
 
+      - name: List directory contents
+        run: |
+          cd bird-app-infra
+          ls -R
+
       - name: Deploy with CDK
         run: |
           cd bird-app-infra
