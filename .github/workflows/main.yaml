@@ -101,19 +101,10 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-central-1
 
-      - name: Get EC2 Private Key
+      - name: Setup SSH key
         run: |
-          PRIVATE_KEY=$(aws secretsmanager get-secret-value --secret-id k3s-private-key --query SecretString --output text)
-          echo "$PRIVATE_KEY" | sed 's/\\n/\n/g' > k3s_private_key.pem
+          echo "${{ secrets.EC2_PRIVATE_KEY }}" > k3s_private_key.pem
           chmod 600 k3s_private_key.pem
-
-      - name: Check private key content
-        run: |
-          echo "Private key length: $(wc -l < k3s_private_key.pem)"
-          echo "First line of private key: $(head -n 1 k3s_private_key.pem)"
-
-      - name: Check key file permissions
-        run: ls -l k3s_private_key.pem
 
       - name: Setup SSH directory
         run: mkdir -p ~/.ssh
