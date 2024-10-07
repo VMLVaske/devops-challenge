@@ -88,54 +88,8 @@ jobs:
           git commit -m "Update Helm chart image tags to ${{ github.sha }}"
           git push
 
-  deploy-infrastructure:
-    needs: update-helm-chart
-    runs-on: ubuntu-latest
-    outputs:
-      master_ip: ${{ steps.get_master_ip.outputs.master_ip }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-central-1
-
-      - name: Install dependencies
-        run: |
-          cd bird-app-infra
-          npm ci
-
-      - name: Build CDK app
-        run: |
-          cd bird-app-infra
-          npm run build
-
-      - name: List directory contents
-        run: |
-          cd bird-app-infra
-          ls -R
-
-      - name: Deploy with CDK
-        run: |
-          cd bird-app-infra
-          npx cdk deploy --require-approval never
-
-      - name: Get Master Node IP
-        id: get_master_ip
-        run: |
-          MASTER_IP=$(aws cloudformation describe-stacks --stack-name BirdInfraStack --query "Stacks[0].Outputs[?ExportName=='MasterNodePublicIP'].OutputValue" --output text)
-          echo "master_ip=$MASTER_IP" >> $GITHUB_OUTPUT
-
   update-argocd:
-    needs: deploy-infrastructure
+    needs: update-helm-chart
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -154,12 +108,12 @@ jobs:
           chmod 600 k3s_private_key.pem
 
       - name: Add EC2 instance to known hosts
-        run: ssh-keyscan -H ${{ needs.deploy-infrastructure.outputs.master_ip }} >> ~/.ssh/known_hosts
+        run: ssh-keyscan -H ${{ secrets.MASTER_IP }} >> ~/.ssh/known_hosts
 
       - name: Fetch kubeconfig from EC2 instance
         run: |
-          ssh -i k3s_private_key.pem ubuntu@${{ needs.deploy-infrastructure.outputs.master_ip }} 'sudo cat /etc/rancher/k3s/k3s.yaml' > kubeconfig
-          sed -i 's/127.0.0.1/${{ needs.deploy-infrastructure.outputs.master_ip }}/g' kubeconfig
+          ssh -i k3s_private_key.pem ubuntu@${{ secrets.MASTER_IP }} 'sudo cat /etc/rancher/k3s/k3s.yaml' > kubeconfig
+          sed -i 's/127.0.0.1/${{ secrets.MASTER_IP }}/g' kubeconfig
           echo "KUBECONFIG=$PWD/kubeconfig" >> $GITHUB_ENV
 
       - name: Update ArgoCD application
