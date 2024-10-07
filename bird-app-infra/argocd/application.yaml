@@ -10,8 +10,13 @@ spec:
     targetRevision: HEAD
     path: helm
     helm:
-      valueFiles:
-        - values.yaml
+      values: |
+        birdApi:
+          image:
+            tag: ${BIRD_API_TAG}
+        birdImageApi:
+          image:
+            tag: ${BIRDIMAGE_API_TAG}
   destination:
     server: https://kubernetes.default.svc
     namespace: default

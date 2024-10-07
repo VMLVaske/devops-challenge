@@ -107,6 +107,9 @@ jobs:
           echo "$PRIVATE_KEY" > k3s_private_key.pem
           chmod 600 k3s_private_key.pem
 
+      - name: Setup SSH directory
+        run: mkdir -p ~/.ssh
+
       - name: Add EC2 instance to known hosts
         run: ssh-keyscan -H ${{ secrets.MASTER_IP }} >> ~/.ssh/known_hosts
 
@@ -118,4 +121,6 @@ jobs:
 
       - name: Update ArgoCD application
         run: |
+          sed -i 's/${BIRD_API_TAG}/${{ github.sha }}/g' bird-app-infra/argocd/application.yaml
+          sed -i 's/${BIRDIMAGE_API_TAG}/${{ github.sha }}/g' bird-app-infra/argocd/application.yaml
           kubectl apply -f bird-app-infra/argocd/application.yaml
