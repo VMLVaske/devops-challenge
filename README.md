@@ -131,3 +131,5 @@ The ArgoCD application is defined in `bird-app-infra/argocd/application.yaml`. T
 ## Secrets Management
 
 EC2 instance private keys are automatically generated and stored in AWS Secrets Manager. The GitHub Actions workflow retrieves these securely for SSH access during deployment.
+
+test. 
